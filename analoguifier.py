@@ -2,47 +2,50 @@ import cv2
 import argparse
 
 import numpy as np
+
 from scipy.special import expit
 
 
 def main():
 	args = get_cmd_args()
 	img = cv2.imread(args.file)
-	print(img.shape)
 	smal = cv2.resize(img, tuple(int(s*args.scale) for s in img.shape[:2])[::-1])
 
-	min_thresh, max_thresh, contrast = args.blacken, args.whiten, args.contrast
+	min_thresh, max_thresh = args.blacken, args.whiten
 
 	if args.gui:
-		min_thresh, max_thresh, contrast = create_gui(smal, min_thresh=min_thresh, max_thresh=max_thresh, contrast=contrast)
+		min_thresh, max_thresh = create_gui(smal, min_thresh=min_thresh, max_thresh=max_thresh)
 
-	result = s_analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh, contrast=contrast/10)
+	result = analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh)
 	cv2.imwrite(args.output, result)
 
 
 def get_cmd_args():
+	def check_uint8(value):
+		ivalue = int(value)
+		if ivalue < 0 or ivalue > 255:
+			raise argparse.ArgumentTypeError(f"value should be between 0 and 255, was {value}")
+		return ivalue
+
 	parser = argparse.ArgumentParser()
 	parser.add_argument("file", help="The image file which you wish to analoguify")
 	parser.add_argument("--gui", help="Show the gui with sliders to manually adjust each value", action="store_true")
 	parser.add_argument("-s", "--scale", help="Scale the image by the factor specified", type=float, default=1)
-	parser.add_argument("-b", "--blacken", help="Set the 'blacken' value to this", type=int, choices=range(256), default=0)
-	parser.add_argument("-w", "--whiten", help="Set the 'whiten' value to this", type=int, choices=range(256), default=255)
-	parser.add_argument("-c", "--contrast", help="Set the 'contrast' value to this", type=int, choices=range(101), default=100)
+	parser.add_argument("-b", "--blacken", help="Set the 'blacken' value to this", type=check_uint8, default=0)
+	parser.add_argument("-w", "--whiten", help="Set the 'whiten' value to this", type=check_uint8, default=255)
 	parser.add_argument("-o", "--output", help="Path to the output file", default="analog_result.jpg")
 
 	return parser.parse_args()
 
 
-def create_gui(img, *, min_thresh, max_thresh, contrast):
+def create_gui(img, *, min_thresh, max_thresh):
 	cv2.imshow("Test", img)
 
 	cv2.createTrackbar("blacken", "Test", 0, 255, slider(img))
 	cv2.createTrackbar("whiten", "Test", 0, 255, slider(img))
-	cv2.createTrackbar("contrast", "Test", 1, 100, slider(img))
 
 	cv2.setTrackbarPos("whiten", "Test", max_thresh)
 	cv2.setTrackbarPos("blacken", "Test", min_thresh)
-	cv2.setTrackbarPos("contrast", "Test", contrast)
 	cv2.waitKey(0)
 
 	return get_trackbar_values()
@@ -50,9 +53,9 @@ def create_gui(img, *, min_thresh, max_thresh, contrast):
 
 def slider(img):
 	def update_img(_):
-		min_thresh, max_thresh, contrast = get_trackbar_values()
+		min_thresh, max_thresh = get_trackbar_values()
 
-		cpy = s_analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh, contrast=contrast/10)
+		cpy = analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh)
 		cv2.imshow("Test", cpy)
 
 	return update_img
@@ -61,29 +64,11 @@ def slider(img):
 def get_trackbar_values():
 	min_thresh = cv2.getTrackbarPos("blacken", "Test")
 	max_thresh = cv2.getTrackbarPos("whiten", "Test")
-	contrast = cv2.getTrackbarPos("contrast", "Test")
 
-	return min_thresh, max_thresh, contrast
-
-
-def s_analoguify(img, *, max_thresh, min_thresh, contrast):
-	lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-	l, a, b = cv2.split(lab)
-	l = l.astype(np.float64)
-
-	norm = (l - min_thresh) / max(max_thresh - min_thresh, 1)
-	norm = np.clip(norm, 0, 1)
-	sig = expit(contrast * (norm - 0.5))
-	l = sig * 255
-	l = np.clip(l, 0, 255).astype(np.uint8)
-
-	lab = cv2.merge((l, a, b))
-	bgr = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-
-	return bgr
+	return min_thresh, max_thresh
 
 
-def analoguify(img, *, min_thresh, max_thresh, contrast):
+def analoguify(img, *, min_thresh, max_thresh):
 	rad = radicalize(img, min_thresh=min_thresh, max_thresh=max_thresh)
 	nrm = normalize(rad, max_thresh, min_thresh)
 
