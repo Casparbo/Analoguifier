@@ -1,6 +1,5 @@
 import cv2
 import argparse
-import sys
 import moviepy
 
 import numpy as np
