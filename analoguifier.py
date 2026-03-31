@@ -1,5 +1,7 @@
 import cv2
 import argparse
+import sys
+import moviepy
 
 import numpy as np
 
@@ -8,7 +10,12 @@ from scipy.special import expit
 
 def main():
 	args = get_cmd_args()
-	img = cv2.imread(args.file)
+
+	if args.video:
+		img = get_video_frame(args.file)
+	else:
+		img = cv2.imread(args.file)
+
 	smal = cv2.resize(img, tuple(int(s*args.scale) for s in img.shape[:2])[::-1])
 
 	min_thresh, max_thresh = args.blacken, args.whiten
@@ -16,8 +23,10 @@ def main():
 	if args.gui:
 		min_thresh, max_thresh = create_gui(smal, min_thresh=min_thresh, max_thresh=max_thresh)
 
-	result = analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh)
-	cv2.imwrite(args.output, result)
+	if args.video:
+		process_video_file(args.file, max_thresh, min_thresh, args.output)
+	else:
+		process_img_file(img, max_thresh, min_thresh, args.output)
 
 
 def get_cmd_args():
@@ -31,11 +40,25 @@ def get_cmd_args():
 	parser.add_argument("file", help="The image file which you wish to analoguify")
 	parser.add_argument("--gui", help="Show the gui with sliders to manually adjust each value", action="store_true")
 	parser.add_argument("-s", "--scale", help="Scale the image by the factor specified", type=float, default=1)
-	parser.add_argument("-b", "--blacken", help="Set the 'blacken' value to this", type=check_uint8, default=0)
-	parser.add_argument("-w", "--whiten", help="Set the 'whiten' value to this", type=check_uint8, default=255)
-	parser.add_argument("-o", "--output", help="Path to the output file", default="analog_result.jpg")
+	parser.add_argument("-b", "--blacken", help="Set the 'blacken' value to this", type=check_uint8, default=20)
+	parser.add_argument("-w", "--whiten", help="Set the 'whiten' value to this", type=check_uint8, default=235)
+	parser.add_argument("-o", "--output", help="Path to the output file")
+	parser.add_argument("-v", "--video", help="File is a video.", action="store_true")
 
-	return parser.parse_args()
+	args = parser.parse_args()
+
+	if not args.output:
+		args.output = "analog_result." + args.file.split(".")[-1]
+
+	return args
+
+
+def get_video_frame(filepath):
+	video = moviepy.VideoFileClip(filepath)
+	frame = video.get_frame(0)
+	bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+	return bgr_frame
 
 
 def create_gui(img, *, min_thresh, max_thresh):
@@ -66,6 +89,19 @@ def get_trackbar_values():
 	max_thresh = cv2.getTrackbarPos("whiten", "Test")
 
 	return min_thresh, max_thresh
+
+
+def process_img_file(img, max_thresh, min_thresh, output):
+	result = analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh)
+	cv2.imwrite(output, result)
+
+
+def process_video_file(filepath, max_thresh, min_thresh, output):
+	video = moviepy.VideoFileClip(filepath)
+
+	edited = video.image_transform(lambda frame: analoguify(frame, max_thresh=max_thresh, min_thresh=min_thresh))
+
+	edited.write_videofile(output)
 
 
 def analoguify(img, *, min_thresh, max_thresh):
