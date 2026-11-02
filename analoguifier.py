@@ -135,9 +135,13 @@ def normalize(img, max_thresh, min_thresh):
 	cpy = img.copy().astype(np.float32)
 
 	cpy = (cpy - min_thresh) / max(max_thresh - min_thresh, 1)
-	cpy = np.clip(cpy, 0, 1) * 255
+	cpy = smooth(np.clip(cpy, 0, 1)) * 255
 
 	return cpy.astype(np.uint8)
+
+
+def smooth(x):
+	return 3*x**2 - 2*x**3
 
 
 def blur(img, balance, kernelsize, blur_thresh):
