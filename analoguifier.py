@@ -18,15 +18,15 @@ def main():
 	smal = cv2.resize(img, tuple(int(s*args.scale) for s in img.shape[:2])[::-1])
 
 	min_thresh, max_thresh = args.blacken, args.whiten
-	balance, kernel, blur_thresh = args.balance, args.kernel, args.blur_thresh
+	balance, kernel = args.balance, args.kernel
 
 	if args.gui:
-		min_thresh, max_thresh, balance, kernel, blur_thresh = create_gui(smal, min_thresh=min_thresh, max_thresh=max_thresh, balance=balance, kernel=kernel, blur_thresh=blur_thresh)
+		min_thresh, max_thresh, balance, kernel = create_gui(smal, min_thresh=min_thresh, max_thresh=max_thresh, balance=balance, kernel=kernel)
 
 	if args.video:
-		process_video_file(args.file, max_thresh, min_thresh, balance, kernel, blur_thresh, args.output)
+		process_video_file(args.file, max_thresh, min_thresh, balance, kernel, args.output)
 	else:
-		process_img_file(img, max_thresh, min_thresh, balance, kernel, blur_thresh, args.output)
+		process_img_file(img, max_thresh, min_thresh, balance, kernel, args.output)
 
 
 def get_cmd_args():
@@ -43,7 +43,6 @@ def get_cmd_args():
 	parser.add_argument("-b", "--blacken", help="Set the 'blacken' value to this", type=check_uint8, default=20)
 	parser.add_argument("-w", "--whiten", help="Set the 'whiten' value to this", type=check_uint8, default=235)
 	parser.add_argument("-ba", "--balance", help="Set the 'balance' value to this", type=np.uint8, default=25)
-	parser.add_argument("-bt", "--blur_thresh", help="Set the 'blur_thresh' value to this", type=np.uint8, default=215)
 	parser.add_argument("-k", "--kernel", help="Set the 'kernel' value to this", type=np.uint8, default=100)
 	parser.add_argument("-o", "--output", help="Path to the output file")
 	parser.add_argument("-v", "--video", help="File is a video.", action="store_true")
@@ -64,14 +63,13 @@ def get_video_frame(filepath):
 	return bgr_frame
 
 
-def create_gui(img, *, min_thresh, max_thresh, balance, kernel, blur_thresh):
+def create_gui(img, *, min_thresh, max_thresh, balance, kernel):
 	cv2.imshow("Test", img)
 
 	cv2.createTrackbar("blacken", "Test", min_thresh, 255, slider(img))
 	cv2.createTrackbar("whiten", "Test", max_thresh, 255, slider(img))
 	cv2.createTrackbar("balance", "Test", balance, 100, slider(img))
-	cv2.createTrackbar("kernel", "Test", kernel, 1000, slider(img))
-	cv2.createTrackbar("blur_thresh", "Test", blur_thresh, 255, slider(img))
+	cv2.createTrackbar("kernel", "Test", kernel, 200, slider(img))
 
 	cv2.waitKey(0)
 
@@ -80,9 +78,9 @@ def create_gui(img, *, min_thresh, max_thresh, balance, kernel, blur_thresh):
 
 def slider(img):
 	def update_img(_):
-		min_thresh, max_thresh, balance, kernel, blur_thresh = get_trackbar_values()
+		min_thresh, max_thresh, balance, kernel = get_trackbar_values()
 
-		cpy = analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh, balance=balance, kernel=kernel, blur_thresh=blur_thresh)
+		cpy = analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh, balance=balance, kernel=kernel)
 		cv2.imshow("Test", cpy)
 
 	return update_img
@@ -93,28 +91,27 @@ def get_trackbar_values():
 	max_thresh = cv2.getTrackbarPos("whiten", "Test")
 	balance = cv2.getTrackbarPos("balance", "Test")
 	kernel = cv2.getTrackbarPos("kernel", "Test")
-	blur_thresh = cv2.getTrackbarPos("blur_thresh", "Test")
 
-	return min_thresh, max_thresh, balance, kernel, blur_thresh
+	return min_thresh, max_thresh, balance, kernel
 
 
-def process_img_file(img, max_thresh, min_thresh, balance, kernel, blur_thresh, output):
-	result = analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh, balance=balance, kernel=kernel, blur_thresh=blur_thresh)
+def process_img_file(img, max_thresh, min_thresh, balance, kernel, output):
+	result = analoguify(img, max_thresh=max_thresh, min_thresh=min_thresh, balance=balance, kernel=kernel)
 	cv2.imwrite(output, result)
 
 
-def process_video_file(filepath, max_thresh, min_thresh, balance, kernel, blur_thresh, output):
+def process_video_file(filepath, max_thresh, min_thresh, balance, kernel, output):
 	video = moviepy.VideoFileClip(filepath)
 
-	edited = video.image_transform(lambda frame: analoguify(frame, max_thresh=max_thresh, min_thresh=min_thresh, balance=balance, kernel=kernel, blur_thresh=blur_thresh))
+	edited = video.image_transform(lambda frame: analoguify(frame, max_thresh=max_thresh, min_thresh=min_thresh, balance=balance, kernel=kernel))
 
 	edited.write_videofile(output)
 
 
-def analoguify(img, *, min_thresh, max_thresh, balance, kernel, blur_thresh):
+def analoguify(img, *, min_thresh, max_thresh, balance, kernel):
 	rad = radicalize(img, min_thresh=min_thresh, max_thresh=max_thresh)
 	nrm = normalize(rad, max_thresh, min_thresh)
-	blr = blur(nrm, balance, kernel, blur_thresh)
+	blr = blur(nrm, balance, kernel)
 
 	return blr
 
@@ -144,7 +141,7 @@ def smooth(x):
 	return 3*x**2 - 2*x**3
 
 
-def blur(img, balance, kernelsize, blur_thresh):
+def blur(img, balance, kernelsize):
 	if kernelsize <= 0:
 		return img.copy()
 	if kernelsize % 2 == 0:
@@ -152,13 +149,9 @@ def blur(img, balance, kernelsize, blur_thresh):
 
 	balance /= 100
 
-	gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	to_blur = np.zeros_like(img)
-	to_blur[gray > blur_thresh] = img[gray > blur_thresh]
-	
-	blurred = cv2.GaussianBlur(to_blur, (kernelsize, kernelsize), 0)
+	blurred = cv2.GaussianBlur(img.copy(), (kernelsize, kernelsize), 0)
 
-	result = blurred*balance + img
+	result = blurred*balance + img*(1-balance)
 	result = result.clip(0, 255)
 
 	return result.astype(np.uint8)
