@@ -109,36 +109,32 @@ def process_video_file(filepath, max_thresh, min_thresh, balance, kernel, output
 
 
 def analoguify(img, *, min_thresh, max_thresh, balance, kernel):
-	rad = radicalize(img, min_thresh=min_thresh, max_thresh=max_thresh)
-	nrm = normalize(rad, max_thresh, min_thresh)
-	blr = blur(nrm, balance, kernel)
+	img = img.copy()
+	rad = radicalize(img, max_thresh, min_thresh)
+	blr = blur(rad, balance, kernel)
 
 	return blr
 
 
-def radicalize(img, *, min_thresh, max_thresh):
-	cpy = img.copy()
+def radicalize(img, max_thresh, min_thresh):
+	img = img.astype(np.float32)
 
-	gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	above_range = gray >= max_thresh
-	below_range = gray <= min_thresh
-	cpy[above_range] = [255, 255, 255]
-	cpy[below_range] = [0, 0, 0]
+	nrm = (img - min_thresh) / max(max_thresh - min_thresh, 1)
+	clp = softclip(nrm) * 255
 
-	return cpy
+	return clp.astype(np.uint8)
 
 
-def normalize(img, max_thresh, min_thresh):
-	cpy = img.copy().astype(np.float32)
-
-	cpy = (cpy - min_thresh) / max(max_thresh - min_thresh, 1)
-	cpy = smooth(np.clip(cpy, 0, 1)) * 255
-
-	return cpy.astype(np.uint8)
+def softclip(x):
+	return np.where(x<0.5, softplus(x), softminus(x))
 
 
-def smooth(x):
-	return 3*x**2 - 2*x**3
+def softplus(x):
+	return 0.01 * np.logaddexp(0, 100*x)
+
+
+def softminus(x):
+	return -0.01*np.logaddexp(0, -100*(x-1)) + 1
 
 
 def blur(img, balance, kernelsize):
