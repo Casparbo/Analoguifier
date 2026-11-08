@@ -119,7 +119,7 @@ def analoguify(img, *, min_thresh, max_thresh, balance, kernel):
 def radicalize(img, max_thresh, min_thresh):
 	img = img.astype(np.float32)
 
-	nrm = (img - min_thresh) / max(max_thresh - min_thresh, 1)
+	nrm = (img - min_thresh) / (max_thresh - min_thresh)
 	clp = softclip(nrm) * 255
 
 	return clp.astype(np.uint8)
