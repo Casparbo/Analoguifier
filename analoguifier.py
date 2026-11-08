@@ -1,6 +1,7 @@
 import cv2
 import argparse
 import moviepy
+import rawpy
 
 import numpy as np
 
@@ -13,7 +14,7 @@ def main():
 	if args.video:
 		img = get_video_frame(args.file)
 	else:
-		img = cv2.imread(args.file)
+		img = read_image(args.file)
 
 	smal = cv2.resize(img, tuple(int(s*args.scale) for s in img.shape[:2])[::-1])
 
@@ -53,6 +54,17 @@ def get_cmd_args():
 		args.output = "analog_result." + args.file.split(".")[-1]
 
 	return args
+
+
+def read_image(path):
+	img = cv2.imread(path)
+
+	if img is None:
+		with rawpy.imread(path) as raw:
+			img = raw.postprocess()
+		img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+	return img
 
 
 def get_video_frame(filepath):
